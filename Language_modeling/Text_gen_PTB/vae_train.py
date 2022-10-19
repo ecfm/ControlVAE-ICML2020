@@ -229,7 +229,7 @@ def main():
                 KL = avg_rec.avg(1)
                 rc = avg_rec.avg(2)
                 print(f"\n{mode}: epoch {epoch}, global_step:{global_steps['step']} nll {nll:.4f}, KL {KL:.4f}, "
-                        f"rc {rc:.4f}, log_ppl {log_ppl:.4f}, ppl {ppl:.4f}")
+                        f"rc {rc:.4f}")
                 sample_rec_text(batch, ret)
                 # writer.add_scalar(f'Loss/Rec_loss_{args.model_name}', rc, global_steps['step'])
                 # writer.add_scalar(f'Loss/KL_diverg_{args.model_name}', KL, global_steps['step'])
