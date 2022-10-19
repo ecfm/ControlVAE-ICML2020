@@ -103,9 +103,11 @@ class VAE(nn.Module):
         logits = outputs.logits
 
         # Losses & train ops
-        rc_loss = tx.losses.sequence_sparse_softmax_cross_entropy(
+        rc_loss_batch = tx.losses.sequence_sparse_softmax_cross_entropy(
             labels=text_ids[:, 1:], logits=logits,
-            sequence_length=seq_lengths)
+            sequence_length=seq_lengths, average_across_batch=False)
+        
+        rc_loss = torch.mean(rc_loss_batch)
 
         nll = rc_loss + kl_weight * kl_loss
 
@@ -113,7 +115,9 @@ class VAE(nn.Module):
             "nll": nll,
             "kl_loss": kl_loss,
             "rc_loss": rc_loss,
-            "lengths": seq_lengths,
+            "rc_loss_batch": rc_loss_batch.tolist(),
+            "sample_id": outputs.sample_id.tolist(),
+            "lengths": seq_lengths
         }
 
         return ret

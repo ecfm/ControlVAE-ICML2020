@@ -140,13 +140,17 @@ kl_anneal_hparams = {
     'start': 0.1
 }
 
+data_hparams = {
+        'file_path': './Language_modeling/Text_gen_PTB/simple-examples/data/top3_laptop_reviews_pyABSA_filtered_lemma_lg.csv'
+}
+
 train_data_hparams = {
     'num_epochs': 1,
     'batch_size': batch_size,
     'seed': 123,
     'dataset': {
-        'files': './simple-examples/data/ptb.train.txt',
-        'vocab_file': './simple-examples/data/vocab.txt'
+        'files': './Language_modeling/Text_gen_PTB/simple-examples/data/ptb.train.txt',
+        'vocab_file': './Language_modeling/Text_gen_PTB/simple-examples/data/vocab.txt'
     }
 }
 
@@ -155,8 +159,8 @@ val_data_hparams = {
     'batch_size': batch_size,
     'seed': 123,
     'dataset': {
-        'files': './simple-examples/data/ptb.valid.txt',
-        'vocab_file': './simple-examples/data/vocab.txt'
+        'files': './Language_modeling/Text_gen_PTB/simple-examples/data/ptb.valid.txt',
+        'vocab_file': './Language_modeling/Text_gen_PTB/simple-examples/data/vocab.txt'
     }
 }
 
@@ -164,8 +168,8 @@ test_data_hparams = {
     'num_epochs': 1,
     'batch_size': batch_size,
     'dataset': {
-        'files': './simple-examples/data/ptb.test.txt',
-        'vocab_file': './simple-examples/data/vocab.txt'
+        'files': './Language_modeling/Text_gen_PTB/simple-examples/data/ptb.test.txt',
+        'vocab_file': './Language_modeling/Text_gen_PTB/simple-examples/data/vocab.txt'
     }
 }
 

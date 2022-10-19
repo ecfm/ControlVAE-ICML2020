@@ -35,7 +35,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.optim.lr_scheduler import ExponentialLR
-
+from torch.utils.data import DataLoader, random_split
+from review_dataset import ReviewDataset, collate_batch
 import texar.torch as tx
 from texar.torch.custom import MultivariateNormalDiag
 from model import VAE
@@ -43,13 +44,13 @@ from PID import PIDControl
 from annealing import _cost_annealing, _cyclical_annealing
 from tqdm import tqdm
 
-from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter()
+# from torch.utils.tensorboard import SummaryWriter
+# writer = SummaryWriter()
 
 ## assign gpu
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', type=int, default=1, help="cuda id.")
+parser.add_argument('--gpu', type=int, default=-1, help="cuda id.")
 parser.add_argument('--config', type=str, default=None, help="The config to use.")
 parser.add_argument('--mode', type=str, default='train', help="Train or predict.")
 parser.add_argument('--model', type=str, default=None, help="Model path for generating sentences.")
@@ -65,7 +66,8 @@ parser.add_argument('--max_steps', type=int, default=80000, help="steps for anne
 
 args = parser.parse_args()
 
-torch.cuda.set_device(args.gpu)
+if args.gpu > 0:    
+    torch.cuda.set_device(args.gpu)
 
 
 def main():
@@ -77,13 +79,16 @@ def main():
     # train_data = tx.data.MonoTextData(config.train_data_hparams, device=device)
     # val_data = tx.data.MonoTextData(config.val_data_hparams, device=device)
     # test_data = tx.data.MonoTextData(config.test_data_hparams, device=device)
-
-    train_data = tx.data.MonoTextData(config.train_data_hparams, device=torch.device("cpu"))
-    val_data = tx.data.MonoTextData(config.val_data_hparams, device=torch.device("cpu"))
-    test_data = tx.data.MonoTextData(config.test_data_hparams, device=torch.device("cpu"))
     
-    iterator = tx.data.DataIterator(
-        {"train": train_data, "valid": val_data, "test": test_data})
+    data = ReviewDataset(config.data_hparams)
+    train_len, val_len = int(len(data) * 0.7), int(len(data) * 0.15)
+    test_len = len(data) - train_len - val_len
+    train_data, val_data, test_data = random_split(data, [train_len, val_len, test_len], generator=torch.Generator().manual_seed(42))
+    train_loader = DataLoader(train_data, batch_size=config.train_data_hparams['batch_size'], shuffle=True, collate_fn=collate_batch)
+    val_loader = DataLoader(val_data, batch_size=config.val_data_hparams['batch_size'], shuffle=False, collate_fn=collate_batch)
+    test_loader = DataLoader(test_data, batch_size=config.test_data_hparams['batch_size'], shuffle=False, collate_fn=collate_batch)
+
+    iterator_dict = {"train": train_loader, "valid": val_loader, "test": test_loader}
 
     opt_vars = {
         'learning_rate': config.lr_decay_hparams["init_lr"],
@@ -116,15 +121,15 @@ def main():
     anneal_r = 1.0 / (config.kl_anneal_hparams["warm_up"] *
                       (len(train_data) / config.batch_size))
 
-    vocab = train_data.vocab
-    model = VAE(train_data.vocab.size, config)
+    vocab = data.vocab
+    model = VAE(len(data.vocab), config)
     model.to(device)
 
     start_tokens = torch.full(
         (config.batch_size,),
-        vocab.bos_token_id,
+        data.bos_token_id,
         dtype=torch.long).to(device)
-    end_token = vocab.eos_token_id
+    end_token = data.eos_token_id
     optimizer = tx.core.get_optimizer(
         params=model.parameters(),
         hparams=config.opt_hparams)
@@ -148,10 +153,25 @@ def main():
     Ki = args.Ki
     exp_kl = args.exp_kl
 
+    @torch.no_grad()
+    def sample_rec_text(batch, ret):
+        print(">>>>>>>>>>>> Reconstruction samples")
+        sample_tokens = data.map_ids_to_tokens_py(ret['sample_id'])
+        sorted_recs = sorted(zip(batch['text'], sample_tokens, ret['rc_loss_batch']), key=lambda x:x[2])
+        for idx, (truth, rec, loss) in enumerate(sorted_recs[:3]\
+            +sorted_recs[int(len(sorted_recs)/2):int(len(sorted_recs)/2)+3]\
+                +sorted_recs[-3:]):
+            print(f"#{idx} Truth:::: {' '.join(truth)}")
+            print(f"Prediction:::: {' '.join(rec)}")
+            print(f"Loss :::: {loss:.2f}")
+            print("============")
+
+
+
     ## train model
     def _run_epoch(epoch: int, mode: str, display: int = 10) \
             -> Tuple[Tensor, float]:
-        iterator.switch_to_dataset(mode)
+        iterator = iterator_dict[mode]
 
         if mode == 'train':
             model.train()
@@ -208,9 +228,12 @@ def main():
                 klw = opt_vars["kl_weight"]
                 KL = avg_rec.avg(1)
                 rc = avg_rec.avg(2)
-                writer.add_scalar(f'Loss/Rec_loss_{args.model_name}', rc, global_steps['step'])
-                writer.add_scalar(f'Loss/KL_diverg_{args.model_name}', KL, global_steps['step'])
-                writer.add_scalar(f'Loss/KL_weight_{args.model_name}', klw, global_steps['step'])
+                print(f"\n{mode}: epoch {epoch}, global_step:{global_steps['step']} nll {nll:.4f}, KL {KL:.4f}, "
+                        f"rc {rc:.4f}, log_ppl {log_ppl:.4f}, ppl {ppl:.4f}")
+                sample_rec_text(batch, ret)
+                # writer.add_scalar(f'Loss/Rec_loss_{args.model_name}', rc, global_steps['step'])
+                # writer.add_scalar(f'Loss/KL_diverg_{args.model_name}', KL, global_steps['step'])
+                # writer.add_scalar(f'Loss/KL_weight_{args.model_name}', klw, global_steps['step'])
                 
         nll = avg_rec.avg(0)
         KL = avg_rec.avg(1)
@@ -259,7 +282,7 @@ def main():
         if config.decoder_type == "transformer":
             outputs = outputs[0]
 
-        sample_tokens = vocab.map_ids_to_tokens_py(outputs.sample_id.cpu())
+        sample_tokens = data.map_ids_to_tokens_py(outputs.sample_id.cpu())
 
         if filename is None:
             fh = sys.stdout
@@ -269,8 +292,8 @@ def main():
         for sent in sample_tokens:
             sent = tx.utils.compat_as_text(list(sent))
             end_id = len(sent)
-            if vocab.eos_token in sent:
-                end_id = sent.index(vocab.eos_token)
+            if data.eos_token in sent:
+                end_id = sent.index(data.eos_token)
             fh.write(' '.join(sent[:end_id + 1]) + '\n')
 
         print('Output done')
