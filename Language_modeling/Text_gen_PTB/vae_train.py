@@ -66,7 +66,7 @@ parser.add_argument('--max_steps', type=int, default=80000, help="steps for anne
 
 args = parser.parse_args()
 
-if args.gpu > 0:    
+if args.gpu >= 0:    
     torch.cuda.set_device(args.gpu)
 
 
