@@ -161,7 +161,7 @@ def main():
         for idx, (truth, rec, loss) in enumerate(sorted_recs[:3]\
             +sorted_recs[int(len(sorted_recs)/2):int(len(sorted_recs)/2)+3]\
                 +sorted_recs[-3:]):
-            print(f"#{idx} Truth:::: {' '.join(truth)}")
+            print(f"#{idx} Truth:::: {' '.join(truth[:truth.index(data.eos_token_id)+1])}")
             print(f"Prediction:::: {' '.join(rec)}")
             print(f"Loss :::: {loss:.2f}")
             print("============")
@@ -313,7 +313,7 @@ def main():
 
     ## start running model
     for epoch in range(config.num_epochs):
-        _, _ = _run_epoch(epoch, 'train', display=200)
+        _, _ = _run_epoch(epoch, 'train', display=1000)
         val_nll, _ = _run_epoch(epoch, 'valid')
         test_nll, test_ppl = _run_epoch(epoch, 'test')
 
